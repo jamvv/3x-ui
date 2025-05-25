@@ -55,7 +55,6 @@ RUN chmod +x \
   /usr/local/bin/cloudflared
 
 ENV XUI_ENABLE_FAIL2BAN="true"
-ENV CLOUDFLARED_TOKEN="" # 通过环境变量传入token
 VOLUME [ "/etc/x-ui" ]
 
 COPY <<EOF /app/cloudflared-start.sh
