@@ -19,7 +19,7 @@ RUN go build -ldflags "-w -s" -o build/x-ui main.go
 RUN ./DockerInit.sh "$TARGETARCH"
 
 # ========================================================
-# Stage: Final Image of 3x-ui
+# Stage: Final Image of 3x-ui with cloudflared
 # ========================================================
 FROM alpine
 ENV TZ=Asia/Tehran
@@ -29,14 +29,19 @@ RUN apk add --no-cache --update \
   ca-certificates \
   tzdata \
   fail2ban \
-  bash
+  bash \
+  curl
+
+# 安装 cloudflared
+ENV CLOUDFLARED_VERSION=2025.5.0
+RUN curl -L -o /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64 \
+  && chmod +x /usr/local/bin/cloudflared
 
 COPY --from=builder /app/build/ /app/
 COPY --from=builder /app/DockerEntrypoint.sh /app/
 COPY --from=builder /app/x-ui.sh /usr/bin/x-ui
 
-
-# Configure fail2ban
+# 配置 fail2ban
 RUN rm -f /etc/fail2ban/jail.d/alpine-ssh.conf \
   && cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local \
   && sed -i "s/^\[ssh\]$/&\nenabled = false/" /etc/fail2ban/jail.local \
@@ -46,9 +51,26 @@ RUN rm -f /etc/fail2ban/jail.d/alpine-ssh.conf \
 RUN chmod +x \
   /app/DockerEntrypoint.sh \
   /app/x-ui \
-  /usr/bin/x-ui
+  /usr/bin/x-ui \
+  /usr/local/bin/cloudflared
 
 ENV XUI_ENABLE_FAIL2BAN="true"
+ENV CLOUDFLARED_TOKEN="" # 通过环境变量传入token
 VOLUME [ "/etc/x-ui" ]
+
+COPY <<EOF /app/cloudflared-start.sh
+#!/bin/sh
+if [ -n "\$CLOUDFLARED_TOKEN" ]; then
+  echo "Starting cloudflared tunnel..."
+  cloudflared tunnel --no-autoupdate run --token "\$CLOUDFLARED_TOKEN" &
+else
+  echo "CLOUDFLARED_TOKEN not set, skipping cloudflared startup."
+fi
+exec "\$@"
+EOF
+
+RUN chmod +x /app/cloudflared-start.sh
+
+# 替换 entrypoint，支持 cloudflared 启动
+ENTRYPOINT [ "/app/cloudflared-start.sh", "/app/DockerEntrypoint.sh" ]
 CMD [ "./x-ui" ]
-ENTRYPOINT [ "/app/DockerEntrypoint.sh" ]
