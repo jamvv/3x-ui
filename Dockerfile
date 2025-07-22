@@ -33,7 +33,7 @@ RUN apk add --no-cache --update \
   curl
 
 # 安装 cloudflared
-ENV CLOUDFLARED_VERSION=2025.5.0
+ENV CLOUDFLARED_VERSION=2025.7.0
 RUN curl -L -o /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64 \
   && chmod +x /usr/local/bin/cloudflared
 
