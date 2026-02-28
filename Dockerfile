@@ -33,6 +33,11 @@ RUN apk add --no-cache --update \
   curl \
   openssl
 
+# 安装 cloudflared
+ENV CLOUDFLARED_VERSION=2026.2.0
+RUN curl -L -o /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/download/${CLOUDFLARED_VERSION}/cloudflared-linux-amd64 \
+  && chmod +x /usr/local/bin/cloudflared
+
 COPY --from=builder /app/build/ /app/
 COPY --from=builder /app/DockerEntrypoint.sh /app/
 COPY --from=builder /app/x-ui.sh /usr/bin/x-ui
@@ -49,9 +54,24 @@ RUN chmod +x \
   /app/DockerEntrypoint.sh \
   /app/x-ui \
   /usr/bin/x-ui
+  /usr/local/bin/cloudflared
 
 ENV XUI_ENABLE_FAIL2BAN="true"
 EXPOSE 2053
 VOLUME [ "/etc/x-ui" ]
+COPY <<EOF /app/cloudflared-start.sh
+#!/bin/sh
+if [ -n "\$CLOUDFLARED_TOKEN" ]; then
+  echo "Starting cloudflared tunnel..."
+  cloudflared tunnel --no-autoupdate run --token "\$CLOUDFLARED_TOKEN" &
+else
+  echo "CLOUDFLARED_TOKEN not set, skipping cloudflared startup."
+fi
+exec "\$@"
+EOF
+
+RUN chmod +x /app/cloudflared-start.sh
+
+# 替换 entrypoint，支持 cloudflared 启动
+ENTRYPOINT [ "/app/cloudflared-start.sh", "/app/DockerEntrypoint.sh" ]
 CMD [ "./x-ui" ]
-ENTRYPOINT [ "/app/DockerEntrypoint.sh" ]
